@@ -240,5 +240,5 @@ heroku open -a your-app-name
 - **Hobby Tier**: $7/month for always-on apps
 - **Database**: MongoDB Atlas has a free tier (512MB)
 - **Add-ons**: Check pricing for additional services
-
+<!-- deploy log -->
 Your deployed app will be available at: `https://your-app-name.herokuapp.com`
