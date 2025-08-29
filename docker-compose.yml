@@ -1,56 +1,58 @@
 version: '3.8'
 
-services:
-  mongodb:
-    image: mongo:6.0
-    container_name: taskmanager_mongodb
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password123
-      MONGO_INITDB_DATABASE: taskmanager
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    networks:
-      - taskmanager_network
+networks:
+  taskmanager-network:
+    driver: bridge
 
+services:
   backend:
-    build: ./backend
-    container_name: taskmanager_backend
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 5000
-      MONGODB_URI: mongodb://admin:password123@mongodb:27017/taskmanager?authSource=admin
-      JWT_SECRET: your_super_secret_jwt_key_here_change_in_production_1234567890
-      JWT_EXPIRES_IN: 7d
-      FRONTEND_URL: http://localhost
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskmanager-backend
     ports:
       - "5000:5000"
-    depends_on:
-      - mongodb
-    networks:
-      - taskmanager_network
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - MONGODB_URI=mongodb+srv://prisma:1234@cluster0.flmxcne.mongodb.net/taskmanager
+      - JWT_SECRET=Oxfordfreepass4$
+      - JWT_EXPIRES_IN=7d
+      - EMAIL_PROVIDER=gmail
+      - EMAIL_FROM=TaskManager <noreply@taskmanager.com>
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=587
+      - EMAIL_USER=samiulalimsaem@gmail.com
+      - EMAIL_PASS=iulyukbuvpcdqjyw
+      - FRONTEND_URL=http://localhost:3000
+      - CLIENT_URL=http://localhost:3000
+    restart: unless-stopped
     volumes:
       - ./backend:/app
       - /app/node_modules
+    networks:
+      - taskmanager-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
-    build: ./frontend
-    container_name: taskmanager_frontend
-    restart: unless-stopped
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: taskmanager-frontend
     ports:
-      - "80:80"
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - taskmanager-network
     depends_on:
       - backend
-    networks:
-      - taskmanager_network
-
-volumes:
-  mongodb_data:
-
-networks:
-  taskmanager_network:
-    driver: bridge
