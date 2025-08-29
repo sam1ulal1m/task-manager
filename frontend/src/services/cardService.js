@@ -1,6 +1,11 @@
 import api from './api'
 
 const cardService = {
+  // Get cards for a board
+  getBoardCards: async (boardId) => {
+    return await api.get(`/cards/board/${boardId}`)
+  },
+
   // Get cards for a list
   getCards: async (listId) => {
     return await api.get(`/cards/list/${listId}`)

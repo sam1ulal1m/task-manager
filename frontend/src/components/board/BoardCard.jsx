@@ -16,7 +16,7 @@ const BoardCard = ({ card }) => {
   const [isHovered, setIsHovered] = useState(false)
 
   const handleCardClick = () => {
-    dispatch(openModal({ modal: 'CardDetails', data: card }))
+    dispatch(openModal({ modal: 'EditCard', data: card }))
   }
 
   const getDueDateStatus = () => {

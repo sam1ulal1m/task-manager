@@ -7,7 +7,8 @@ import {
   Plus,
   ChevronRight,
   Star,
-  Calendar
+  Calendar,
+  Globe
 } from 'lucide-react'
 import { openModal } from '../store/slices/uiSlice'
 
@@ -29,6 +30,12 @@ const Sidebar = () => {
       icon: Users,
       href: '/teams',
       active: location.pathname === '/teams'
+    },
+    {
+      name: 'Public Boards',
+      icon: Globe,
+      href: '/public-boards',
+      active: location.pathname === '/public-boards'
     },
     {
       name: 'Profile',

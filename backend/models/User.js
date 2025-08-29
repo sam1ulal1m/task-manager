@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -39,6 +40,14 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  passwordResetToken: {
+    type: String,
+    select: false
+  },
+  passwordResetExpires: {
+    type: Date,
+    select: false
+  },
   teams: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team'
@@ -64,10 +73,26 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+// Generate password reset token
+userSchema.methods.createPasswordResetToken = function() {
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  
+  return resetToken;
+};
+
 // Remove password from JSON output
 userSchema.methods.toJSON = function() {
   const userObject = this.toObject();
   delete userObject.password;
+  delete userObject.passwordResetToken;
+  delete userObject.passwordResetExpires;
   return userObject;
 };
 

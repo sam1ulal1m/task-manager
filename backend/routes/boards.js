@@ -8,6 +8,60 @@ const { checkBoardAccess } = require('../middleware/auth');
 
 const router = express.Router();
 
+// @desc    Get public boards
+// @route   GET /api/boards/public
+// @access  Public
+router.get('/public', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = '' } = req.query;
+    
+    let query = {
+      visibility: 'public',
+      isArchived: false
+    };
+
+    // Apply search
+    if (search) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ]
+      });
+    }
+
+    const boards = await Board.find(query)
+      .populate('owner', 'name email avatar')
+      .populate('members.user', 'name email avatar')
+      .populate('team', 'name')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ updatedAt: -1 });
+
+    const total = await Board.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      boards,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / limit),
+        total,
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Get public boards error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching public boards'
+    });
+  }
+});
+
 // @desc    Get all boards for user
 // @route   GET /api/boards
 // @access  Private

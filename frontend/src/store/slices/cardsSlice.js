@@ -2,6 +2,19 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import cardService from '../../services/cardService'
 import toast from 'react-hot-toast'
 
+// Fetch cards for a board
+export const fetchBoardCards = createAsyncThunk(
+  'cards/fetchBoardCards',
+  async (boardId, { rejectWithValue }) => {
+    try {
+      const response = await cardService.getBoardCards(boardId)
+      return response.data.cards
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch cards')
+    }
+  }
+)
+
 // Fetch cards for a list
 export const fetchCards = createAsyncThunk(
   'cards/fetchCards',
@@ -172,6 +185,53 @@ const cardsSlice = createSlice({
     clearError: (state) => {
       state.error = null
     },
+    // Optimistic updates for drag and drop
+    optimisticMoveCard: (state, action) => {
+      const { cardId, sourceListId, destinationListId, sourceIndex, destinationIndex } = action.payload
+      
+      // Find and remove card from source list
+      let movedCard = null
+      if (state.cards[sourceListId]) {
+        const cardIndex = state.cards[sourceListId].findIndex(card => card._id === cardId)
+        if (cardIndex !== -1) {
+          movedCard = state.cards[sourceListId].splice(cardIndex, 1)[0]
+        }
+      }
+      
+      if (movedCard) {
+        // Update card's list reference
+        movedCard.list = destinationListId
+        
+        // Add card to destination list at correct position
+        if (!state.cards[destinationListId]) {
+          state.cards[destinationListId] = []
+        }
+        state.cards[destinationListId].splice(destinationIndex, 0, movedCard)
+      }
+    },
+    revertOptimisticMove: (state, action) => {
+      const { cardId, sourceListId, destinationListId, sourceIndex, destinationIndex } = action.payload
+      
+      // Find and remove card from destination list
+      let movedCard = null
+      if (state.cards[destinationListId]) {
+        const cardIndex = state.cards[destinationListId].findIndex(card => card._id === cardId)
+        if (cardIndex !== -1) {
+          movedCard = state.cards[destinationListId].splice(cardIndex, 1)[0]
+        }
+      }
+      
+      if (movedCard) {
+        // Revert card's list reference
+        movedCard.list = sourceListId
+        
+        // Add card back to source list at original position
+        if (!state.cards[sourceListId]) {
+          state.cards[sourceListId] = []
+        }
+        state.cards[sourceListId].splice(sourceIndex, 0, movedCard)
+      }
+    },
     // Real-time updates
     cardCreated: (state, action) => {
       const card = action.payload
@@ -312,6 +372,33 @@ const cardsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Fetch Board Cards
+      .addCase(fetchBoardCards.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(fetchBoardCards.fulfilled, (state, action) => {
+        state.isLoading = false
+        // Group cards by list ID
+        const cardsGrouped = {}
+        action.payload.forEach(card => {
+          if (!cardsGrouped[card.list]) {
+            cardsGrouped[card.list] = []
+          }
+          cardsGrouped[card.list].push(card)
+        })
+        // Sort cards within each list by position
+        Object.keys(cardsGrouped).forEach(listId => {
+          cardsGrouped[listId].sort((a, b) => a.position - b.position)
+        })
+        state.cards = cardsGrouped
+        state.error = null
+      })
+      .addCase(fetchBoardCards.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+      
       // Fetch Cards
       .addCase(fetchCards.pending, (state) => {
         state.isLoading = true
@@ -487,7 +574,9 @@ export const {
   memberAssigned,
   memberUnassigned,
   commentAdded,
-  reorderCards
+  reorderCards,
+  optimisticMoveCard,
+  revertOptimisticMove
 } = cardsSlice.actions
 
 export default cardsSlice.reducer

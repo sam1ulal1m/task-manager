@@ -1,8 +1,10 @@
 const express = require('express');
+const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const Team = require('../models/Team');
 const User = require('../models/User');
 const Board = require('../models/Board');
+const Invitation = require('../models/Invitation');
 
 const router = express.Router();
 
@@ -528,6 +530,341 @@ router.put('/:id/members/:userId/role', [
     res.status(500).json({
       success: false,
       message: 'Server error updating member role'
+    });
+  }
+});
+
+// @desc    Invite user to team
+// @route   POST /api/teams/:id/invite
+// @access  Private
+router.post('/:id/invite', [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Valid email is required'),
+  body('role')
+    .optional()
+    .isIn(['admin', 'member'])
+    .withMessage('Role must be admin or member'),
+  body('message')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Message must not exceed 500 characters')
+], async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const team = await Team.findById(req.params.id);
+    if (!team) {
+      return res.status(404).json({
+        success: false,
+        message: 'Team not found'
+      });
+    }
+
+    const { email, role = 'member', message } = req.body;
+
+    // Check if user has permission to invite
+    const userMember = team.members.find(member => 
+      member.user.toString() === req.user._id.toString()
+    );
+    
+    if (!userMember || (userMember.role !== 'owner' && userMember.role !== 'admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to invite members to this team'
+      });
+    }
+
+    // Check if user already exists and is a member
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      const existingMember = team.members.find(member => 
+        member.user.toString() === existingUser._id.toString()
+      );
+      
+      if (existingMember) {
+        return res.status(400).json({
+          success: false,
+          message: 'User is already a member of this team'
+        });
+      }
+    }
+
+    // Check if there's already a pending invitation
+    const existingInvitation = await Invitation.findOne({
+      email,
+      team: team._id,
+      status: 'pending'
+    });
+
+    if (existingInvitation) {
+      return res.status(400).json({
+        success: false,
+        message: 'An invitation has already been sent to this email'
+      });
+    }
+
+    // Generate invitation token
+    const token = crypto.randomBytes(32).toString('hex');
+
+    // Create invitation
+    const invitation = await Invitation.create({
+      email,
+      team: team._id,
+      inviter: req.user._id,
+      role,
+      token,
+      message
+    });
+
+    // TODO: Send email notification here
+    console.log(`Team invitation sent to ${email} for team "${team.name}"`);
+    console.log(`Invitation URL: ${process.env.CLIENT_URL}/invite/${token}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Invitation sent successfully',
+      invitation: {
+        id: invitation._id,
+        email: invitation.email,
+        role: invitation.role,
+        status: invitation.status,
+        expiresAt: invitation.expiresAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Send team invitation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error sending invitation'
+    });
+  }
+});
+
+// @desc    Get team invitations
+// @route   GET /api/teams/:id/invitations
+// @access  Private
+router.get('/:id/invitations', async (req, res) => {
+  try {
+    const teamId = req.params.id;
+
+    // Find team and check permissions
+    const team = await Team.findById(teamId);
+    if (!team) {
+      return res.status(404).json({
+        success: false,
+        message: 'Team not found'
+      });
+    }
+
+    // Check if user has permission to view invitations
+    const userMember = team.members.find(member => 
+      member.user.toString() === req.user._id.toString()
+    );
+
+    if (!userMember || (userMember.role !== 'owner' && userMember.role !== 'admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view invitations for this team'
+      });
+    }
+
+    const invitations = await Invitation.find({
+      team: teamId,
+      status: 'pending'
+    })
+    .populate('inviter', 'name email')
+    .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      invitations
+    });
+  } catch (error) {
+    console.error('Get team invitations error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// @desc    Accept team invitation
+// @route   POST /api/teams/invite/:token/accept
+// @access  Public
+router.post('/invite/:token/accept', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Find the invitation
+    const invitation = await Invitation.findOne({
+      token,
+      status: 'pending',
+      expiresAt: { $gt: new Date() }
+    }).populate('team');
+
+    if (!invitation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired invitation'
+      });
+    }
+
+    const team = invitation.team;
+
+    // Check if user exists
+    let user = await User.findOne({ email: invitation.email });
+    
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please create an account first to accept this invitation',
+        email: invitation.email
+      });
+    }
+
+    // Check if user is already a member
+    const existingMember = team.members.find(member => 
+      member.user.toString() === user._id.toString()
+    );
+    
+    if (existingMember) {
+      // Mark invitation as accepted even if already a member
+      invitation.status = 'accepted';
+      await invitation.save();
+      
+      return res.status(400).json({
+        success: false,
+        message: 'You are already a member of this team'
+      });
+    }
+
+    // Add user to team
+    team.members.push({
+      user: user._id,
+      role: invitation.role
+    });
+
+    await team.save();
+
+    // Add team to user's teams array
+    await User.findByIdAndUpdate(user._id, {
+      $addToSet: { teams: team._id }
+    });
+
+    // Update invitation status
+    invitation.status = 'accepted';
+    await invitation.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Invitation accepted successfully',
+      team: {
+        id: team._id,
+        name: team.name,
+        description: team.description
+      }
+    });
+
+  } catch (error) {
+    console.error('Accept team invitation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error accepting invitation'
+    });
+  }
+});
+
+// @desc    Decline team invitation
+// @route   POST /api/teams/invite/:token/decline
+// @access  Public
+router.post('/invite/:token/decline', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Find the invitation
+    const invitation = await Invitation.findOne({
+      token,
+      status: 'pending'
+    });
+
+    if (!invitation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid invitation'
+      });
+    }
+
+    // Update invitation status
+    invitation.status = 'declined';
+    await invitation.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Invitation declined'
+    });
+
+  } catch (error) {
+    console.error('Decline team invitation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error declining invitation'
+    });
+  }
+});
+
+// @desc    Get team invitations
+// @route   GET /api/teams/:id/invitations
+// @access  Private
+router.get('/:id/invitations', async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.id);
+    if (!team) {
+      return res.status(404).json({
+        success: false,
+        message: 'Team not found'
+      });
+    }
+
+    // Check if user has permission to view invitations
+    const userMember = team.members.find(member => 
+      member.user.toString() === req.user._id.toString()
+    );
+    
+    if (!userMember || (userMember.role !== 'owner' && userMember.role !== 'admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view team invitations'
+      });
+    }
+
+    const invitations = await Invitation.find({
+      team: req.params.id
+    })
+    .populate('inviter', 'name email avatar')
+    .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      invitations
+    });
+
+  } catch (error) {
+    console.error('Get team invitations error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching invitations'
     });
   }
 });

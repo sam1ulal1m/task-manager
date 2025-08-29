@@ -1,7 +1,11 @@
 import { createSlice } from '@reduxjs/toolkit'
 
 const initialState = {
-  // Modals
+  // Modal system
+  modal: null,
+  modalData: null,
+  
+  // Legacy modal flags (for backward compatibility)
   showCreateBoardModal: false,
   showCreateTeamModal: false,
   showCardModal: false,
@@ -49,19 +53,30 @@ const uiSlice = createSlice({
     // Modal actions
     openModal: (state, action) => {
       const { modal, data } = action.payload
-      state[`show${modal}Modal`] = true
-      if (data) {
-        Object.assign(state, data)
+      state.modal = modal
+      state.modalData = data || null
+      
+      // Legacy support
+      if (modal === 'CreateBoard') {
+        state.showCreateBoardModal = true
+      } else if (modal === 'CreateTeam') {
+        state.showCreateTeamModal = true
+      } else if (modal === 'EditCard') {
+        state.showCardModal = true
+        state.selectedCard = data
       }
     },
-    closeModal: (state, action) => {
-      const modal = action.payload
-      state[`show${modal}Modal`] = false
+    closeModal: (state) => {
+      state.modal = null
+      state.modalData = null
       
-      // Clear related data when closing modals
-      if (modal === 'Card') {
-        state.selectedCard = null
-      }
+      // Legacy support - close all modals
+      state.showCreateBoardModal = false
+      state.showCreateTeamModal = false
+      state.showCardModal = false
+      state.showInviteMemberModal = false
+      state.showDeleteConfirmModal = false
+      state.selectedCard = null
     },
     closeAllModals: (state) => {
       state.showCreateBoardModal = false

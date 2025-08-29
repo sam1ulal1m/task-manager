@@ -47,14 +47,12 @@ export const createTeam = createAsyncThunk(
 // Update team
 export const updateTeam = createAsyncThunk(
   'teams/updateTeam',
-  async ({ teamId, updates }, { rejectWithValue }) => {
+  async ({ teamId, teamData }, { rejectWithValue }) => {
     try {
-      const response = await teamService.updateTeam(teamId, updates)
-      toast.success('Team updated successfully!')
+      const response = await teamService.updateTeam(teamId, teamData)
       return response.data.team
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to update team'
-      toast.error(message)
       return rejectWithValue(message)
     }
   }
@@ -95,30 +93,68 @@ export const addTeamMember = createAsyncThunk(
 // Remove member from team
 export const removeTeamMember = createAsyncThunk(
   'teams/removeMember',
-  async ({ teamId, userId }, { rejectWithValue }) => {
+  async ({ teamId, memberId }, { rejectWithValue }) => {
     try {
-      await teamService.removeMember(teamId, userId)
-      toast.success('Member removed successfully!')
-      return { teamId, userId }
+      await teamService.removeMember(teamId, memberId)
+      return { teamId, memberId }
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to remove member'
-      toast.error(message)
       return rejectWithValue(message)
     }
   }
 )
 
 // Update member role
-export const updateMemberRole = createAsyncThunk(
+export const updateTeamMember = createAsyncThunk(
   'teams/updateMemberRole',
-  async ({ teamId, userId, role }, { rejectWithValue }) => {
+  async ({ teamId, memberId, role }, { rejectWithValue }) => {
     try {
-      const response = await teamService.updateMemberRole(teamId, userId, role)
-      toast.success('Member role updated successfully!')
+      const response = await teamService.updateMemberRole(teamId, memberId, role)
       return response.data.team
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to update member role'
-      toast.error(message)
+      return rejectWithValue(message)
+    }
+  }
+)
+
+// Invite user to team
+export const inviteToTeam = createAsyncThunk(
+  'teams/inviteToTeam',
+  async ({ teamId, email, role }, { rejectWithValue }) => {
+    try {
+      const response = await teamService.inviteToTeam(teamId, email, role)
+      return response.data.invitation
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to send invitation'
+      return rejectWithValue(message)
+    }
+  }
+)
+
+// Fetch team invitations
+export const fetchTeamInvitations = createAsyncThunk(
+  'teams/fetchTeamInvitations',
+  async (teamId, { rejectWithValue }) => {
+    try {
+      const response = await teamService.getTeamInvitations(teamId)
+      return response.data.invitations
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to fetch invitations'
+      return rejectWithValue(message)
+    }
+  }
+)
+
+// Cancel invitation
+export const cancelInvitation = createAsyncThunk(
+  'teams/cancelInvitation',
+  async (invitationId, { rejectWithValue }) => {
+    try {
+      await teamService.cancelInvitation(invitationId)
+      return invitationId
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to cancel invitation'
       return rejectWithValue(message)
     }
   }
@@ -127,6 +163,7 @@ export const updateMemberRole = createAsyncThunk(
 const initialState = {
   teams: [],
   currentTeam: null,
+  invitations: [],
   isLoading: false,
   error: null,
   pagination: {
@@ -244,24 +281,24 @@ const teamsSlice = createSlice({
       
       // Remove Member
       .addCase(removeTeamMember.fulfilled, (state, action) => {
-        const { teamId, userId } = action.payload
+        const { teamId, memberId } = action.payload
         
         const teamIndex = state.teams.findIndex(team => team._id === teamId)
         if (teamIndex !== -1) {
           state.teams[teamIndex].members = state.teams[teamIndex].members.filter(
-            member => member.user._id !== userId
+            member => member.user._id !== memberId
           )
         }
         
         if (state.currentTeam && state.currentTeam._id === teamId) {
           state.currentTeam.members = state.currentTeam.members.filter(
-            member => member.user._id !== userId
+            member => member.user._id !== memberId
           )
         }
       })
       
       // Update Member Role
-      .addCase(updateMemberRole.fulfilled, (state, action) => {
+      .addCase(updateTeamMember.fulfilled, (state, action) => {
         const index = state.teams.findIndex(team => team._id === action.payload._id)
         if (index !== -1) {
           state.teams[index] = action.payload
@@ -269,6 +306,23 @@ const teamsSlice = createSlice({
         if (state.currentTeam && state.currentTeam._id === action.payload._id) {
           state.currentTeam = action.payload
         }
+      })
+
+      // Fetch Team Invitations
+      .addCase(fetchTeamInvitations.fulfilled, (state, action) => {
+        state.invitations = action.payload
+      })
+
+      // Invite to Team
+      .addCase(inviteToTeam.fulfilled, (state, action) => {
+        state.invitations.push(action.payload)
+      })
+
+      // Cancel Invitation
+      .addCase(cancelInvitation.fulfilled, (state, action) => {
+        state.invitations = state.invitations.filter(
+          invitation => invitation._id !== action.payload
+        )
       })
   },
 })

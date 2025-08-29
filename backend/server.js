@@ -15,6 +15,7 @@ const boardRoutes = require('./routes/boards');
 const listRoutes = require('./routes/lists');
 const cardRoutes = require('./routes/cards');
 const teamRoutes = require('./routes/teams');
+const invitationRoutes = require('./routes/invitations');
 
 // Import middleware
 const { protect } = require('./middleware/auth');
@@ -89,6 +90,7 @@ app.use('/api/boards', protect, boardRoutes);
 app.use('/api/lists', protect, listRoutes);
 app.use('/api/cards', protect, cardRoutes);
 app.use('/api/teams', protect, teamRoutes);
+app.use('/api/invitations', protect, invitationRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

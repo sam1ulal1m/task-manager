@@ -7,6 +7,54 @@ const User = require('../models/User');
 
 const router = express.Router();
 
+// @desc    Get all cards for a board
+// @route   GET /api/cards/board/:boardId
+// @access  Private
+router.get('/board/:boardId', async (req, res) => {
+  try {
+    const board = await Board.findById(req.params.boardId);
+    if (!board) {
+      return res.status(404).json({
+        success: false,
+        message: 'Board not found'
+      });
+    }
+
+    // Check board access
+    const isOwner = board.owner.toString() === req.user._id.toString();
+    const isMember = board.members.some(member => 
+      member.user.toString() === req.user._id.toString()
+    );
+
+    if (!isOwner && !isMember && board.visibility === 'private') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied'
+      });
+    }
+
+    const cards = await Card.find({ 
+      board: req.params.boardId,
+      isArchived: false 
+    })
+    .populate('assignedMembers', 'name email avatar')
+    .populate('comments.user', 'name email avatar')
+    .sort({ position: 1 });
+
+    res.status(200).json({
+      success: true,
+      cards
+    });
+
+  } catch (error) {
+    console.error('Get board cards error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error getting cards'
+    });
+  }
+});
+
 // @desc    Get all cards for a list
 // @route   GET /api/cards/list/:listId
 // @access  Private

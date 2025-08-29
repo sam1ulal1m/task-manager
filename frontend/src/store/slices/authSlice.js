@@ -9,7 +9,7 @@ export const checkAuth = createAsyncThunk(
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        return rejectWithValue('No token found')
+        return rejectWithValue('Authentication failed')
       }
       
       const response = await authService.getCurrentUser()

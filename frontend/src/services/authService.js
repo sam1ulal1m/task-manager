@@ -26,6 +26,16 @@ const authService = {
     return await api.put('/auth/change-password', passwordData)
   },
 
+  // Forgot password
+  forgotPassword: async (email) => {
+    return await api.post('/auth/forgot-password', { email })
+  },
+
+  // Reset password
+  resetPassword: async (token, passwordData) => {
+    return await api.put(`/auth/reset-password/${token}`, passwordData)
+  },
+
   // Delete account
   deleteAccount: async () => {
     return await api.delete('/auth/account')

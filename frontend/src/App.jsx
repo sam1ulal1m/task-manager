@@ -12,11 +12,19 @@ import Dashboard from './pages/Dashboard'
 import Board from './pages/Board'
 import Teams from './pages/Teams'
 import Profile from './pages/Profile'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
+import PublicBoards from './pages/PublicBoards'
 
 // Components
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoadingSpinner from './components/LoadingSpinner'
+import CreateBoardModal from './components/modals/CreateBoardModal'
+import CreateTeamModal from './components/modals/CreateTeamModal'
+import EditTeamModal from './components/modals/EditTeamModal'
+import TeamMembersModal from './components/modals/TeamMembersModal'
+import EditCardModal from './components/modals/EditCardModal'
 
 // Store
 import { checkAuth } from './store/slices/authSlice'
@@ -58,6 +66,18 @@ function App() {
             path="/register" 
             element={!isAuthenticated ? <Register /> : <Navigate to="/dashboard" />} 
           />
+          <Route 
+            path="/forgot-password" 
+            element={!isAuthenticated ? <ForgotPassword /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/reset-password/:token" 
+            element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/public-boards" 
+            element={<PublicBoards />} 
+          />
           
           {/* Protected Routes */}
           <Route 
@@ -78,6 +98,13 @@ function App() {
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>
+
+        {/* Global Modals */}
+        <CreateBoardModal />
+        <CreateTeamModal />
+        <EditTeamModal />
+        <TeamMembersModal />
+        <EditCardModal />
       </div>
     </DndProvider>
   )

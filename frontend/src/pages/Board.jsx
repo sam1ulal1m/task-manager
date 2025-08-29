@@ -25,9 +25,12 @@ import {
 } from '../store/slices/listsSlice'
 import { 
   fetchCards,
+  fetchBoardCards,
   createCard,
   updateCard,
-  updateCardPosition
+  moveCard,
+  optimisticMoveCard,
+  revertOptimisticMove
 } from '../store/slices/cardsSlice'
 import { openModal, setCardFilter } from '../store/slices/uiSlice'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -41,9 +44,12 @@ const Board = () => {
   const dispatch = useDispatch()
   const { currentBoard, isLoading } = useSelector(state => state.boards)
   const { lists } = useSelector(state => state.lists)
-  const { cards } = useSelector(state => state.cards)
+  const { cards: cardsByList } = useSelector(state => state.cards)
   const { cardFilter } = useSelector(state => state.ui)
   const { user } = useSelector(state => state.auth)
+  
+  // Flatten cards from all lists
+  const cards = Object.values(cardsByList).flat()
   
   const [showCreateList, setShowCreateList] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -53,11 +59,11 @@ const Board = () => {
     if (boardId) {
       dispatch(fetchBoard(boardId))
       dispatch(fetchLists(boardId))
-      dispatch(fetchCards({ boardId }))
+      dispatch(fetchBoardCards(boardId))
     }
   }, [dispatch, boardId])
 
-  const handleDragEnd = (result) => {
+  const handleDragEnd = async (result) => {
     const { destination, source, type, draggableId } = result
 
     if (!destination) return
@@ -77,16 +83,37 @@ const Board = () => {
         position: newPosition
       }))
     } else if (type === 'card') {
-      // Handle card movement
+      // Handle card movement with optimistic update
       const sourceListId = source.droppableId
       const destinationListId = destination.droppableId
+      const cardId = draggableId
       
-      dispatch(updateCardPosition({
-        cardId: draggableId,
-        sourceListId,
-        destinationListId,
-        newPosition: destination.index
-      }))
+      try {
+        // Perform optimistic update first
+        dispatch(optimisticMoveCard({
+          cardId,
+          sourceListId,
+          destinationListId,
+          sourceIndex: source.index,
+          destinationIndex: destination.index
+        }))
+        
+        // Then make API call
+        await dispatch(moveCard({
+          cardId,
+          destinationListId,
+          newPosition: destination.index
+        })).unwrap()
+      } catch (error) {
+        // Revert optimistic update on failure
+        dispatch(revertOptimisticMove({
+          cardId,
+          sourceListId,
+          destinationListId,
+          sourceIndex: source.index,
+          destinationIndex: destination.index
+        }))
+      }
     }
   }
 
@@ -148,7 +175,7 @@ const Board = () => {
       {/* Board Header */}
       <BoardHeader 
         board={currentBoard}
-        onUpdateBoard={(updates) => dispatch(updateBoard({ id: currentBoard._id, updates }))}
+        onUpdateBoard={(updates) => dispatch(updateBoard({ boardId: currentBoard._id, updates }))}
         onToggleFavorite={() => dispatch(toggleBoardFavorite(currentBoard._id))}
         onOpenSettings={() => dispatch(openModal({ modal: 'BoardSettings', data: currentBoard }))}
         onOpenMembers={() => dispatch(openModal({ modal: 'BoardMembers', data: currentBoard }))}
@@ -251,7 +278,7 @@ const Board = () => {
                 }}
               >
                 {/* Render Lists */}
-                {lists
+                {[...lists]
                   .sort((a, b) => a.position - b.position)
                   .map((list, index) => (
                     <Draggable key={list._id} draggableId={list._id} index={index}>
